@@ -1,72 +1,72 @@
-const { bluetooth } = require('web-bluetooth');
+const { SerialPort } = require('serialport');
 const db = require('./db');
 const { v4: uuidv4 } = require('uuid');
-
-// Custom UUIDs for our service and characteristic
-const SERVICE_UUID = '00001234-0000-1000-8000-00805f9b34fb';
-const CHARACTERISTIC_UUID = '00005678-0000-1000-8000-00805f9b34fb';
 
 class BluetoothServer {
     constructor() {
         this.deviceId = uuidv4();
+        this.port = null;
         this.connectedDevices = new Map();
+        this.isScanning = false;
         
         // Initialize user in database
         db.createUser(this.deviceId);
     }
 
-    async requestDevice() {
+    async listPorts() {
         try {
-            const device = await bluetooth.requestDevice({
-                filters: [{ services: [SERVICE_UUID] }]
-            });
-
-            device.addEventListener('gattserverdisconnected', () => {
-                console.log(`Device ${device.id} disconnected`);
-                this.connectedDevices.delete(device.id);
-            });
-
-            return device;
+            const ports = await SerialPort.list();
+            return ports.filter(port => port.pnpId?.includes('BTHENUM')); // Filter Bluetooth ports
         } catch (error) {
-            console.error('Error requesting device:', error);
-            throw error;
+            console.error('Failed to list ports:', error);
+            return [];
         }
     }
 
-    async connect(device) {
+    async connect(portPath) {
         try {
-            const server = await device.gatt.connect();
-            const service = await server.getPrimaryService(SERVICE_UUID);
-            const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
-
-            // Set up notification handling
-            await characteristic.startNotifications();
-            characteristic.addEventListener('characteristicvaluechanged', (event) => {
-                this.handleTransaction(device.id, event.target.value);
+            this.port = new SerialPort({
+                path: portPath,
+                baudRate: 9600,
+                autoOpen: false
             });
 
-            this.connectedDevices.set(device.id, {
-                device,
-                characteristic
-            });
+            return new Promise((resolve, reject) => {
+                this.port.open((err) => {
+                    if (err) {
+                        console.error('Error opening port:', err);
+                        reject(err);
+                        return;
+                    }
 
-            console.log(`Connected to device: ${device.id}`);
+                    console.log('Connected to port:', portPath);
+
+                    this.port.on('data', (data) => {
+                        this.handleData(data);
+                    });
+
+                    this.port.on('error', (err) => {
+                        console.error('Port error:', err);
+                    });
+
+                    resolve(true);
+                });
+            });
         } catch (error) {
             console.error('Connection error:', error);
             throw error;
         }
     }
 
-    async handleTransaction(senderId, value) {
+    async handleData(data) {
         try {
-            const transaction = JSON.parse(new TextDecoder().decode(value));
+            const message = JSON.parse(data.toString());
             
-            if (transaction.type === 'PAYMENT') {
-                const { amount, receiverId } = transaction;
+            if (message.type === 'PAYMENT') {
+                const { amount, senderId, receiverId } = message;
                 
-                // Update sender's balance
+                // Update balances
                 await db.updateBalance(senderId, amount, false);
-                // Update receiver's balance
                 await db.updateBalance(receiverId, amount, true);
                 
                 // Record transaction
@@ -82,24 +82,19 @@ class BluetoothServer {
                 const confirmation = {
                     type: 'CONFIRMATION',
                     status: 'success',
-                    transaction: transaction
+                    transaction: message
                 };
                 
-                const device = this.connectedDevices.get(senderId);
-                if (device) {
-                    const encoder = new TextEncoder();
-                    await device.characteristic.writeValue(encoder.encode(JSON.stringify(confirmation)));
-                }
+                this.sendData(confirmation);
             }
         } catch (error) {
-            console.error('Failed to handle transaction:', error);
+            console.error('Failed to handle data:', error);
         }
     }
 
     async sendPayment(receiverId, amount) {
-        const device = this.connectedDevices.get(receiverId);
-        if (!device) {
-            throw new Error('Receiver not connected');
+        if (!this.port || !this.port.isOpen) {
+            throw new Error('Not connected to any device');
         }
 
         const transaction = {
@@ -109,21 +104,31 @@ class BluetoothServer {
             receiverId
         };
 
-        const encoder = new TextEncoder();
-        await device.characteristic.writeValue(encoder.encode(JSON.stringify(transaction)));
+        this.sendData(transaction);
     }
 
-    async disconnect(deviceId) {
-        const device = this.connectedDevices.get(deviceId);
-        if (device) {
-            await device.device.gatt.disconnect();
-            this.connectedDevices.delete(deviceId);
+    sendData(data) {
+        if (!this.port || !this.port.isOpen) {
+            throw new Error('Not connected to any device');
         }
+
+        const message = JSON.stringify(data);
+        this.port.write(Buffer.from(message), (err) => {
+            if (err) {
+                console.error('Failed to send data:', err);
+            }
+        });
     }
 
-    async disconnectAll() {
-        for (const [deviceId] of this.connectedDevices) {
-            await this.disconnect(deviceId);
+    disconnect() {
+        if (this.port && this.port.isOpen) {
+            this.port.close((err) => {
+                if (err) {
+                    console.error('Error closing port:', err);
+                } else {
+                    console.log('Port closed successfully');
+                }
+            });
         }
     }
 }
@@ -131,8 +136,8 @@ class BluetoothServer {
 const server = new BluetoothServer();
 
 // Handle cleanup on exit
-process.on('SIGINT', async () => {
-    await server.disconnectAll();
+process.on('SIGINT', () => {
+    server.disconnect();
     process.exit();
 });
 

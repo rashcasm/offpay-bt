@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { getUser, createUser, updateBalance, getBalance, createTransaction, getTransactions } = require('./db');
+const db = require('./db');
 const bluetooth = require('./bluetooth');
 
 const app = express();
@@ -11,7 +11,7 @@ app.use(express.json());
 app.post('/api/users', async (req, res) => {
     try {
         const { id } = req.body;
-        await createUser(id);
+        await db.createUser(id);
         res.json({ message: 'User initialized' });
     } catch (error) {
         console.error('Error initializing user:', error);
@@ -22,7 +22,7 @@ app.post('/api/users', async (req, res) => {
 // Get balance
 app.get('/api/balance/:id', async (req, res) => {
     try {
-        const balance = await getBalance(req.params.id);
+        const balance = await db.getBalance(req.params.id);
         res.json({ balance });
     } catch (error) {
         console.error('Error getting balance:', error);
@@ -34,18 +34,18 @@ app.get('/api/balance/:id', async (req, res) => {
 app.post('/api/transactions', async (req, res) => {
     try {
         const transaction = req.body;
-        const sender = await getUser(transaction.sender_id);
+        const sender = await db.getUser(transaction.sender_id);
         
         if (!sender || sender.balance < transaction.amount) {
             return res.status(400).json({ error: 'Insufficient balance' });
         }
 
         // Update balances
-        await updateBalance(transaction.sender_id, transaction.amount, false);
-        await updateBalance(transaction.receiver_id, transaction.amount, true);
+        await db.updateBalance(transaction.sender_id, transaction.amount, false);
+        await db.updateBalance(transaction.receiver_id, transaction.amount, true);
         
         // Record transaction
-        await createTransaction(transaction);
+        await db.createTransaction(transaction);
         
         res.json({ message: 'Transaction processed' });
     } catch (error) {
@@ -57,7 +57,7 @@ app.post('/api/transactions', async (req, res) => {
 // Get transactions
 app.get('/api/transactions/:id', async (req, res) => {
     try {
-        const transactions = await getTransactions(req.params.id);
+        const transactions = await db.getTransactions(req.params.id);
         res.json(transactions);
     } catch (error) {
         console.error('Error getting transactions:', error);
@@ -73,8 +73,39 @@ app.get('/device-id', (req, res) => {
 // Get balance
 app.get('/balance', async (req, res) => {
     try {
-        const balance = await getBalance(bluetooth.deviceId);
+        const balance = await db.getBalance(bluetooth.deviceId);
         res.json({ balance });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// List available Bluetooth ports
+app.get('/bluetooth/ports', async (req, res) => {
+    try {
+        const ports = await bluetooth.listPorts();
+        res.json({ ports });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Connect to a Bluetooth port
+app.post('/bluetooth/connect', async (req, res) => {
+    try {
+        const { portPath } = req.body;
+        await bluetooth.connect(portPath);
+        res.json({ status: 'connected' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Disconnect Bluetooth
+app.post('/bluetooth/disconnect', (req, res) => {
+    try {
+        bluetooth.disconnect();
+        res.json({ status: 'disconnected' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -86,7 +117,7 @@ app.post('/send', async (req, res) => {
     
     try {
         await bluetooth.sendPayment(receiverId, amount);
-        res.json({ status: 'payment initiated' });
+        res.json({ status: 'payment sent' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -95,7 +126,7 @@ app.post('/send', async (req, res) => {
 // Get transaction history
 app.get('/transactions', async (req, res) => {
     try {
-        const transactions = await getTransactions(bluetooth.deviceId);
+        const transactions = await db.getTransactions(bluetooth.deviceId);
         res.json({ transactions });
     } catch (error) {
         res.status(500).json({ error: error.message });

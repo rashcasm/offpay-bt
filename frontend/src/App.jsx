@@ -6,11 +6,11 @@ const API_URL = 'http://localhost:3000';
 function App() {
   const [deviceId, setDeviceId] = useState(null);
   const [balance, setBalance] = useState(0);
-  const [receiverId, setReceiverId] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
   const [transactions, setTransactions] = useState([]);
   const [status, setStatus] = useState('disconnected');
-  const [connectedDevice, setConnectedDevice] = useState(null);
+  const [availablePorts, setAvailablePorts] = useState([]);
+  const [selectedPort, setSelectedPort] = useState('');
 
   // Get device ID and initialize data
   useEffect(() => {
@@ -55,56 +55,55 @@ function App() {
     }
   };
 
-  const connectBluetooth = async () => {
+  const scanPorts = async () => {
+    try {
+      setStatus('scanning');
+      const response = await fetch(`${API_URL}/bluetooth/ports`);
+      const data = await response.json();
+      setAvailablePorts(data.ports);
+      setStatus(data.ports.length > 0 ? 'ports-found' : 'no-ports');
+    } catch (error) {
+      console.error('Failed to scan ports:', error);
+      setStatus('error');
+    }
+  };
+
+  const connectToPort = async (portPath) => {
     try {
       setStatus('connecting');
-      
-      // Request Bluetooth device with our custom service
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: ['00001234-0000-1000-8000-00805f9b34fb'] }]
+      const response = await fetch(`${API_URL}/bluetooth/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portPath })
       });
 
-      // Connect to the device
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService('00001234-0000-1000-8000-00805f9b34fb');
-      const characteristic = await service.getCharacteristic('00005678-0000-1000-8000-00805f9b34fb');
+      if (!response.ok) {
+        throw new Error('Failed to connect');
+      }
 
-      // Set up notifications
-      await characteristic.startNotifications();
-      characteristic.addEventListener('characteristicvaluechanged', handleBluetoothData);
-
-      setConnectedDevice({ device, characteristic });
       setStatus('connected');
-      setReceiverId(device.id);
-
-      // Handle disconnection
-      device.addEventListener('gattserverdisconnected', () => {
-        setStatus('disconnected');
-        setConnectedDevice(null);
-        setReceiverId('');
-      });
-
+      setSelectedPort(portPath);
     } catch (error) {
-      console.error('Bluetooth error:', error);
+      console.error('Connection error:', error);
       setStatus('error');
       alert('Failed to connect: ' + error.message);
     }
   };
 
-  const handleBluetoothData = async (event) => {
-    const value = event.target.value;
-    const decoder = new TextDecoder();
-    const data = JSON.parse(decoder.decode(value));
-    
-    if (data.type === 'CONFIRMATION') {
-      // Transaction confirmed, refresh data
-      fetchBalance();
-      fetchTransactions();
+  const disconnect = async () => {
+    try {
+      await fetch(`${API_URL}/bluetooth/disconnect`, {
+        method: 'POST'
+      });
+      setStatus('disconnected');
+      setSelectedPort('');
+    } catch (error) {
+      console.error('Disconnect error:', error);
     }
   };
 
   const sendMoney = async () => {
-    if (!transferAmount || !connectedDevice) {
+    if (!transferAmount || status !== 'connected') {
       alert('Please connect to a device and enter an amount');
       return;
     }
@@ -125,7 +124,7 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          receiverId: receiverId,
+          receiverId: selectedPort,
           amount: amount
         })
       });
@@ -153,37 +152,74 @@ function App() {
       </div>
 
       <div className="bluetooth-section">
-        <button 
-          onClick={connectBluetooth}
-          className={`bluetooth-btn ${status === 'connected' ? 'connected' : ''}`}
-          disabled={status === 'connecting'}
-        >
-          {status === 'connecting' ? 'Connecting...' :
-           status === 'connected' ? 'Connected' : 'Connect Device'}
-        </button>
-        <p className="status">Status: {status}</p>
-        {status === 'connected' && (
-          <p className="connected-device">Connected to: {receiverId}</p>
-        )}
-      </div>
-
-      <div className="transfer-section">
-        <h2>Send Money</h2>
-        <div className="transfer-form">
-          <input
-            type="number"
-            value={transferAmount}
-            onChange={(e) => setTransferAmount(e.target.value)}
-            placeholder="Enter amount"
-            disabled={!connectedDevice}
-          />
-          <button 
-            onClick={sendMoney}
-            disabled={!connectedDevice || !transferAmount}
-          >
-            Send
+        {status === 'disconnected' && (
+          <button onClick={scanPorts} className="bluetooth-btn">
+            Scan for Devices
           </button>
-        </div>
+        )}
+
+        {status === 'scanning' && (
+          <div className="status-message">Scanning for devices...</div>
+        )}
+
+        {status === 'ports-found' && (
+          <div className="ports-list">
+            <h3>Available Devices:</h3>
+            {availablePorts.map((port) => (
+              <button
+                key={port.path}
+                onClick={() => connectToPort(port.path)}
+                className="port-btn"
+              >
+                {port.friendlyName || port.path}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {status === 'connecting' && (
+          <div className="status-message">Connecting...</div>
+        )}
+
+        {status === 'connected' && (
+          <>
+            <div className="connected-status">
+              <span className="connected-indicator">●</span> Connected to device
+              <button onClick={disconnect} className="disconnect-btn">
+                Disconnect
+              </button>
+            </div>
+
+            <div className="transfer-section">
+              <h2>Send Money</h2>
+              <div className="transfer-form">
+                <input
+                  type="number"
+                  value={transferAmount}
+                  onChange={(e) => setTransferAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  className="amount-input"
+                />
+                <button 
+                  onClick={sendMoney}
+                  className="send-btn"
+                  disabled={!transferAmount}
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {status === 'error' && (
+          <div className="error-message">
+            Failed to connect. Please try again.
+            <button onClick={() => setStatus('disconnected')} className="retry-btn">
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="transactions">
