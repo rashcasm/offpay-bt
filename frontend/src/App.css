@@ -30,6 +30,22 @@ h1 {
   margin-bottom: 30px;
 }
 
+h2 {
+  text-align: center;
+  color: #2c3e50;
+  margin-bottom: 10px;
+}
+
+h3 {
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
+p {
+  color: #2c3e50;
+  margin-bottom: 15px;
+}
+
 .device-info {
   background-color: #f8f9fa;
   padding: 15px;
@@ -38,31 +54,19 @@ h1 {
   text-align: center;
 }
 
-.device-info strong {
-  color: #2c3e50;
-  font-family: monospace;
-}
-
 .balance-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background-color: #ffffff;
   padding: 20px;
-  border-radius: 12px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
   text-align: center;
-  margin-bottom: 30px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.balance-card h2 {
-  margin: 0;
-  font-size: 1.2em;
-  opacity: 0.9;
 }
 
 .balance {
-  font-size: 2.5em;
+  font-size: 2em;
   font-weight: bold;
-  margin: 10px 0;
+  color: #28a745;
 }
 
 .bluetooth-section {
@@ -90,137 +94,147 @@ h1 {
   transform: translateY(-1px);
 }
 
-.status-message {
+.connection-section {
+  background-color: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
   text-align: center;
-  color: #666;
-  margin: 20px 0;
-  font-size: 0.9em;
 }
 
-.ports-list {
-  margin-top: 20px;
-}
-
-.ports-list h3 {
-  margin-bottom: 15px;
-  color: #2c3e50;
-}
-
-.port-btn {
-  width: 100%;
-  background-color: #fff;
-  border: 1px solid #4CAF50;
-  color: #4CAF50;
-  padding: 10px;
-  margin-bottom: 10px;
+.connect-btn, .scan-btn, .retry-btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 12px 24px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  font-size: 1em;
+  transition: background-color 0.2s;
 }
 
-.port-btn:hover {
-  background-color: #4CAF50;
+.connect-btn:hover, .scan-btn:hover, .retry-btn:hover {
+  background-color: #0056b3;
+}
+
+.device-section {
+  margin-top: 15px;
+}
+
+.device-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+}
+
+.device-btn {
+  background-color: #f8f9fa;
+  border: 2px solid #dee2e6;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.device-btn:hover {
+  background-color: #e9ecef;
+  border-color: #007bff;
+}
+
+.device-btn.selected {
+  background-color: #007bff;
   color: white;
+  border-color: #0056b3;
+}
+
+.status-message {
+  color: #6c757d;
+  margin: 15px 0;
+  font-style: italic;
+}
+
+.connected-section {
+  text-align: center;
 }
 
 .connected-status {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   margin-bottom: 20px;
-  color: #2c3e50;
+  color: #000000;
 }
 
 .connected-indicator {
-  color: #4CAF50;
+  color: #28a745;
   font-size: 1.2em;
 }
 
 .disconnect-btn {
-  margin-left: auto;
   background-color: #dc3545;
   color: white;
   border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  margin-left: 10px;
 }
 
 .disconnect-btn:hover {
   background-color: #c82333;
 }
 
-.error-message {
-  text-align: center;
-  color: #dc3545;
-  margin: 20px 0;
-  padding: 15px;
-  border: 1px solid #dc3545;
-  border-radius: 6px;
-  background-color: #fff;
-}
-
-.retry-btn {
-  display: block;
-  margin: 15px auto 0;
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.retry-btn:hover {
-  background-color: #5a6268;
-}
-
 .transfer-section {
   margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #eee;
 }
 
 .transfer-form {
   display: flex;
   gap: 10px;
+  justify-content: center;
   margin-top: 15px;
 }
 
 .amount-input {
-  flex: 1;
   padding: 10px;
-  border: 1px solid #ddd;
+  border: 2px solid #dee2e6;
   border-radius: 6px;
   font-size: 1em;
+  width: 150px;
 }
 
 .send-btn {
-  background-color: #2196F3;
+  background-color: #28a745;
   color: white;
   border: none;
   padding: 10px 20px;
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s;
 }
 
 .send-btn:hover {
-  background-color: #1976D2;
-  transform: translateY(-1px);
+  background-color: #218838;
 }
 
 .send-btn:disabled {
-  background-color: #ccc;
+  background-color: #6c757d;
   cursor: not-allowed;
-  transform: none;
+}
+
+.error-message {
+  color: #dc3545;
+  margin-bottom: 15px;
 }
 
 .transactions {
-  background-color: white;
+  background-color: #ffffff;
   padding: 20px;
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -230,11 +244,11 @@ h1 {
 
 .transaction-item {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   gap: 15px;
-  padding: 15px;
-  border-bottom: 1px solid #eee;
   align-items: center;
+  padding: 15px;
+  border-bottom: 1px solid #dee2e6;
 }
 
 .transaction-item:last-child {
@@ -243,23 +257,28 @@ h1 {
 
 .transaction-type {
   font-weight: bold;
-  color: #666;
+  color: #6c757d;
 }
 
 .transaction-amount {
-  font-size: 1.1em;
   font-weight: bold;
-  color: #2c3e50;
+  color: #28a745;
 }
 
 .transaction-party {
-  color: #666;
-  font-size: 0.9em;
+  color: #6c757d;
 }
 
 .transaction-time {
-  color: #999;
-  font-size: 0.8em;
+  color: #6c757d;
+  font-size: 0.9em;
+}
+
+.no-transactions {
+  text-align: center;
+  color: #6c757d;
+  font-style: italic;
+  padding: 20px;
 }
 
 @media (max-width: 480px) {

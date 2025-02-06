@@ -1,139 +1,138 @@
 const express = require('express');
 const cors = require('cors');
+const { WebSocketServer } = require('ws');
+const { v4: uuidv4 } = require('uuid');
+const http = require('http');
 const db = require('./db');
-const bluetooth = require('./bluetooth');
 
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
 app.use(cors());
 app.use(express.json());
 
-// Initialize user
-app.post('/api/users', async (req, res) => {
-    try {
-        const { id } = req.body;
-        await db.createUser(id);
-        res.json({ message: 'User initialized' });
-    } catch (error) {
-        console.error('Error initializing user:', error);
-        res.status(500).json({ error: 'Failed to initialize user' });
-    }
-});
+// Store connected devices
+const connectedDevices = new Map();
+const deviceId = uuidv4(); // Current device ID
 
-// Get balance
-app.get('/api/balance/:id', async (req, res) => {
-    try {
-        const balance = await db.getBalance(req.params.id);
-        res.json({ balance });
-    } catch (error) {
-        console.error('Error getting balance:', error);
-        res.status(500).json({ error: 'Failed to get balance' });
-    }
-});
+console.log('Current Device ID:', deviceId);
 
-// Process transaction
-app.post('/api/transactions', async (req, res) => {
-    try {
-        const transaction = req.body;
-        const sender = await db.getUser(transaction.sender_id);
-        
-        if (!sender || sender.balance < transaction.amount) {
-            return res.status(400).json({ error: 'Insufficient balance' });
+// WebSocket connection handling
+wss.on('connection', (ws) => {
+    console.log('Device connected');
+
+    ws.on('message', async (data) => {
+        try {
+            const message = JSON.parse(data);
+            
+            switch (message.type) {
+                case 'REGISTER':
+                    // Register the device
+                    connectedDevices.set(message.deviceId, ws);
+                    ws.deviceId = message.deviceId;
+                    console.log('Device registered:', message.deviceId);
+                    
+                    // Initialize user if needed
+                    await db.createUser(message.deviceId);
+                    
+                    ws.send(JSON.stringify({
+                        type: 'REGISTERED',
+                        status: 'success'
+                    }));
+                    break;
+
+                case 'PAYMENT':
+                    const { senderId, receiverId, amount } = message;
+                    const sender = await db.getUser(senderId);
+                    
+                    if (!sender || sender.balance < amount) {
+                        ws.send(JSON.stringify({
+                            type: 'PAYMENT_RESPONSE',
+                            status: 'error',
+                            error: 'Insufficient balance'
+                        }));
+                        return;
+                    }
+
+                    // Update balances
+                    await db.updateBalance(senderId, amount, false); // Deduct from sender
+                    await db.updateBalance(receiverId, amount, true); // Add to receiver
+
+                    // Record transaction
+                    const transactionId = uuidv4();
+                    await db.createTransaction({
+                        id: transactionId,
+                        sender_id: senderId,
+                        receiver_id: receiverId,
+                        amount: amount,
+                        timestamp: new Date().toISOString()
+                    });
+
+                    // Notify both sender and receiver
+                    ws.send(JSON.stringify({
+                        type: 'PAYMENT_RESPONSE',
+                        status: 'success',
+                        transactionId
+                    }));
+
+                    const receiverWs = connectedDevices.get(receiverId);
+                    if (receiverWs) {
+                        receiverWs.send(JSON.stringify({
+                            type: 'PAYMENT_RECEIVED',
+                            senderId,
+                            amount,
+                            transactionId
+                        }));
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Error processing message:', error);
+            ws.send(JSON.stringify({
+                type: 'ERROR',
+                error: error.message
+            }));
         }
+    });
 
-        // Update balances
-        await db.updateBalance(transaction.sender_id, transaction.amount, false);
-        await db.updateBalance(transaction.receiver_id, transaction.amount, true);
-        
-        // Record transaction
-        await db.createTransaction(transaction);
-        
-        res.json({ message: 'Transaction processed' });
-    } catch (error) {
-        console.error('Error processing transaction:', error);
-        res.status(500).json({ error: 'Failed to process transaction' });
-    }
+    ws.on('close', () => {
+        if (ws.deviceId) {
+            connectedDevices.delete(ws.deviceId);
+            console.log('Device disconnected:', ws.deviceId);
+        }
+    });
 });
 
-// Get transactions
-app.get('/api/transactions/:id', async (req, res) => {
-    try {
-        const transactions = await db.getTransactions(req.params.id);
-        res.json(transactions);
-    } catch (error) {
-        console.error('Error getting transactions:', error);
-        res.status(500).json({ error: 'Failed to get transactions' });
-    }
-});
-
-// Get current device ID
+// REST API endpoints
 app.get('/device-id', (req, res) => {
-    res.json({ deviceId: bluetooth.deviceId });
+    res.json({ deviceId });
 });
 
-// Get balance
 app.get('/balance', async (req, res) => {
     try {
-        const balance = await db.getBalance(bluetooth.deviceId);
+        const balance = await db.getBalance(deviceId);
         res.json({ balance });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// List available Bluetooth ports
-app.get('/bluetooth/ports', async (req, res) => {
-    try {
-        const ports = await bluetooth.listPorts();
-        res.json({ ports });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Connect to a Bluetooth port
-app.post('/bluetooth/connect', async (req, res) => {
-    try {
-        const { portPath } = req.body;
-        await bluetooth.connect(portPath);
-        res.json({ status: 'connected' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Disconnect Bluetooth
-app.post('/bluetooth/disconnect', (req, res) => {
-    try {
-        bluetooth.disconnect();
-        res.json({ status: 'disconnected' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Send payment
-app.post('/send', async (req, res) => {
-    const { receiverId, amount } = req.body;
-    
-    try {
-        await bluetooth.sendPayment(receiverId, amount);
-        res.json({ status: 'payment sent' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Get transaction history
 app.get('/transactions', async (req, res) => {
     try {
-        const transactions = await db.getTransactions(bluetooth.deviceId);
+        const transactions = await db.getTransactions(deviceId);
         res.json({ transactions });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
+app.get('/connected-devices', (req, res) => {
+    const devices = Array.from(connectedDevices.keys()).filter(id => id !== deviceId);
+    res.json({ devices });
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
